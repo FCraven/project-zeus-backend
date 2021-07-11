@@ -30,7 +30,17 @@ const getListings =async ()=> {
   }
 }
 
-// getListings()
+const getDescription = async (location)=> {
+  try{
+    const response = await axios.get(`https://en.wikipedia.org/w/api.php?origin=*&action=opensearch&search=${location},%20New%20York`)
+    return response.data
+  } catch(err) {
+      console.log(err)
+  }
+
+}
+
+getListings()
 
 const listingFetcher = setInterval(getListings, (60000 * 60 * 8))
 
@@ -58,9 +68,9 @@ app.get('/api/properties', (req,res) => {
 
 })
 
-app.get('/api/locations', (req,res)=> {
+app.get('/api/locations', async(req,res)=> {
   const cityArray = allListings.map(el => el.City)
-  const uniqueCities = [...new Set(cityArray)].sort((a,b)=> {
+  const uniqueCities = [...new Set(cityArray)].sort((a,b) => {
     a = a.toUpperCase()
     b = b.toUpperCase()
     if(a < b) {
@@ -71,21 +81,26 @@ app.get('/api/locations', (req,res)=> {
     }
     return 0;
   })
-  res.json(uniqueCities)
+
+  try {
+    //try to run it as a loop and then promise.all the array that you push to
+
+    const urlQuery = uniqueCities[0].split(' ').length > 1 ?
+                        uniqueCities[0].split(' ').join('%20') :
+                        uniqueCities[0];
+    console.log('URLQUERY-> ', urlQuery)
+      const searchQuery = `${urlQuery},%20New%20York`;
+      // const endpoint = `https://en.wikipedia.org/w/api.php?action=query&list=search&prop=info&inprop=url&utf8=&format=json&origin=*&srlimit=1&srsearch=${searchQuery}`;
+  const endpoint = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&format=plain&generator=search&gsrsearch=${searchQuery}&gsrlimit=1&format=json&origin=*`;
+      const response = await axios.get(endpoint);
+
+      res.json(response.data)
+    } catch(err) {
+        console.log(err)
+    }
+
 })
 
-app.get('/api/description', (req,res)=> {
-
-  wiki()
-  .page('Eastchester, New York')
-  .then(page => page.summary())
-  .then(summary=> {
-    console.log(summary)
-    res.end()
-  })
-  .catch(err => console.log(err))
-
-})
 
 
 app.listen(PORT, function(){
