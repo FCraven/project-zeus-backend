@@ -2,7 +2,7 @@ require('dotenv').config();
 const axios = require('axios');
 const express = require('express');
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 const morgan = require('morgan');
 const wiki = require('wikijs').default;
 
@@ -13,8 +13,10 @@ let allListings = [];
 
 const getListings =async ()=> {
   try {
+    console.log(`Getting listings at ${Date.now()}`)
     const { data } = await axios.get(`https://api.bridgedataoutput.com/api/v2/onekey/listings?access_token=${process.env.SERVER_TOKEN}&limit=200&sortBy=ListPrice`)
     const { bundle } = data
+    console.log('Got listings!')
 
     for(const listing of bundle){
       const scrubbedListing = {};
@@ -25,19 +27,28 @@ const getListings =async ()=> {
       }
       allListings.push(scrubbedListing)
     }
+
   } catch(err) {
     console.log(err)
   }
 }
 
-const getDescription = async (location)=> {
-  try{
-    const response = await axios.get(`https://en.wikipedia.org/w/api.php?origin=*&action=opensearch&search=${location},%20New%20York`)
-    return response.data
+const getWikiDescription = async (location) => {
+  try {
+    const urlQuery = location.split(' ').length > 1 ?
+                        location.split(' ').join('%20') :
+                        location;
+    const searchQuery = `${urlQuery},%20New%20York`;
+    const endpoint = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&format=plain&generator=search&gsrsearch=${searchQuery}&gsrlimit=1&format=json&origin=*`;
+    const { data } = await axios.get(endpoint);
+    if(!data){
+      return 'No summary available.'
+    }
+    const summary = data.query.pages[Object.keys(data.query.pages)[0]].extract
+    return summary
   } catch(err) {
       console.log(err)
   }
-
 }
 
 getListings()
@@ -58,7 +69,7 @@ app.get('/api/listings', (req,res) => {
   }
 })
 
-app.get('/api/top', (req,res)=> {
+app.get('/api/topfive', (req,res)=> {
   res.json(allListings[0])
 })
 
@@ -69,7 +80,7 @@ app.get('/api/properties', (req,res) => {
 })
 
 app.get('/api/locations', async(req,res)=> {
-  const cityArray = allListings.map(el => el.City)
+  const cityArray = allListings.map(el => el.PostalCity)
   const uniqueCities = [...new Set(cityArray)].sort((a,b) => {
     a = a.toUpperCase()
     b = b.toUpperCase()
@@ -81,24 +92,28 @@ app.get('/api/locations', async(req,res)=> {
     }
     return 0;
   })
+  res.json(uniqueCities)
+})
 
+app.get('/api/locations/:location', async (req,res) => {
   try {
-    //try to run it as a loop and then promise.all the array that you push to
+    const location = req.params.location
+    const locationName = location[0].toUpperCase() + location.slice(1)
+    const summary = await getWikiDescription(locationName)
+    const listingsByLocation = allListings.filter(el => el.PostalCity === locationName)
 
-    const urlQuery = uniqueCities[0].split(' ').length > 1 ?
-                        uniqueCities[0].split(' ').join('%20') :
-                        uniqueCities[0];
-    console.log('URLQUERY-> ', urlQuery)
-      const searchQuery = `${urlQuery},%20New%20York`;
-      // const endpoint = `https://en.wikipedia.org/w/api.php?action=query&list=search&prop=info&inprop=url&utf8=&format=json&origin=*&srlimit=1&srsearch=${searchQuery}`;
-  const endpoint = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&format=plain&generator=search&gsrsearch=${searchQuery}&gsrlimit=1&format=json&origin=*`;
-      const response = await axios.get(endpoint);
+    res.json({
+      location: locationName,
+      summary,
+      listings: listingsByLocation
+    })
+  } catch(err) {
+      console.log(err)
+  }
+})
 
-      res.json(response.data)
-    } catch(err) {
-        console.log(err)
-    }
-
+app.get('/keep-alive', (req,res,next) => {
+  res.json({message: 'Heard '})
 })
 
 
