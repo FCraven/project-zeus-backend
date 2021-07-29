@@ -112,6 +112,10 @@ app.get('/api/locations/:location', async (req,res) => {
   }
 })
 
+app.get('/api/images',(req,res)=> {
+  res.json(allListings[0].Media[0].MediaURL)
+})
+
 app.get('/keep-alive', (req,res,next) => {
   res.json({message: 'Heard '})
 })
